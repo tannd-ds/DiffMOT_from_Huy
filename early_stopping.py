@@ -21,7 +21,7 @@ class EarlyStopping:
                 self.early_stop = True
         else:
             self.best_score = score
-            self.save_checkpoint(model, epoch, optimizer, model_dir, dataset)
+            self.save_checkpoint(model, epoch, optimizer, scheduler, model_dir, dataset)
             self.counter = 0
 
     def save_checkpoint(self, model, epoch, optimizer, scheduler, model_dir, dataset):
