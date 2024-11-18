@@ -16,7 +16,7 @@ interval: 5
 augment: True
 encoder_dim: 256
 tf_layer: 3
-epochs: 2
+epochs: 10
 batch_size: 2048
 seed: 123
 eval_every: 20
