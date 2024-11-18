@@ -5,7 +5,7 @@ eval_mode: False
 
 # early_stopping
 patience: 5
-delta : 0.001
+delta : 0
 
 # optimizer
 lr: 0.0001
