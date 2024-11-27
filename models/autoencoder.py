@@ -3,7 +3,7 @@ import torch
 from torch.nn import Module
 import models.diffusion as diffusion
 from models.diffusion import VarianceSchedule, D2MP_OB
-from models.unet_variants import ReUNet3Plus
+from models.unet_variants import ReUNet3Plus, ReUNet
 import numpy as np
 
 class D2MP(Module):
