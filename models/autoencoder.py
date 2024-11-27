@@ -12,10 +12,16 @@ class D2MP(Module):
         self.config = config
         self.device = device
         self.encoder = encoder
+        
+        network = config.network
+        if network == 'ReUNet':
+          net = ReUNet()
+        elif network == 'ReUNet+++':
+          net = ReUNet3Plus()
 
         self.diffusion = D2MP_OB(
             # net = self.diffnet(point_dim=2, context_dim=config.encoder_dim, tf_layer=config.tf_layer, residual=False),
-            net=ReUNet3Plus(),
+            net=net,
             var_sched = VarianceSchedule(
                 num_steps=100,
                 beta_T=5e-2,
