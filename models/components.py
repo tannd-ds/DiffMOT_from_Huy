@@ -54,12 +54,6 @@ class TransAoA(nn.Module):
     self.head = nn.Linear(hidden_size, output_size)
 
   def forward(self, input, ctx):
-    # Check if input and ctx are 2D, if so, unsqueeze to make them 3D
-    # if input.dim() == 2:
-    #     input = input.unsqueeze(1)
-    # if ctx.dim() == 2:
-    #     ctx = ctx.unsqueeze(1)
-
     input = self.mlp_input(input)
 
     encoded_input = self.transformer_core(tgt = input,
@@ -67,11 +61,7 @@ class TransAoA(nn.Module):
     aoa_output = self.aoa(torch.cat([encoded_input, input], dim = -1))
     res_connection = self.residual_fn(input, aoa_output)
 
-    output = self.head(res_connection) # Squeeze the output back to 2D if the input was originally 2D
-    # if output.size(1) == 1:
-    #     output = output.squeeze(1)
-
-    return output
+    return self.head(res_connection) # Squeeze the output back to 2D if the input was originally 2
 
 class ReUnet3PlusDownBlock(nn.Module):
   def __init__(self, down_num, up_num, mid_num, filter, reversed_filters, num_layers, hidden_size = 256):
