@@ -256,7 +256,10 @@ class DiffMOT():
         # if self.config.eval_mode:
         #     self.model.load_state_dict({k.replace('module.', ''): v for k, v in self.checkpoint['ddpm'].items()})
 
+        params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
         print("> Model built!")
+        print('Network Version: ', self.config.network)
+        print(f'Network Params: {params}')
 
     def _build_train_loader(self):
         config = self.config
