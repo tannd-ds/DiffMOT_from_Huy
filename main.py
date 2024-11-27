@@ -9,6 +9,7 @@ def parse_args():
         description='Pytorch implementation of MID')
     parser.add_argument('--config', default='', help='Path to the config file')
     parser.add_argument('--dataset', default='', help='Dataset name')
+    parser.add_argument('--network', choices=['ReUNet', 'ReUNet+++'], help='Unet version')
     parser.add_argument('--data_dir', default=None, help='Path to the data directory')
     parser.add_argument('--epochs', type=int, default=None, help='Number of epochs')
     return parser.parse_args()
@@ -30,6 +31,8 @@ def main():
         config.data_dir = args.data_dir
     if args.epochs is not None:
         config.epochs = args.epochs
+    if args.network is not None:
+        config.network = args.network
 
     agent = DiffMOT(config)
 
