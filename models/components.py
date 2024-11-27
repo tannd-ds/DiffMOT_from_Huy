@@ -119,7 +119,7 @@ class ReUnet3PlusDownBlock(nn.Module):
 
     # Output
     all_samples = up_list + mid_list + down_list
-    concat_samples = torch.stack(all_samples, dim = 0)
+    concat_samples = torch.stack(all_samples, dim = 1)
     concat_samples = concat_samples.view(-1, concat_samples.size(1) * concat_samples.size(2))
     return self.output(input = concat_samples,
                        ctx = ctx)
