@@ -3,7 +3,7 @@ import torch
 from torch.nn import Module
 import models.diffusion as diffusion
 from models.diffusion import VarianceSchedule, D2MP_OB
-from models.unet_variants import ReUNet3Plus, ReUNet
+from models.unet_variants import ReUNet3Plus, ReUNet, ReUNet3Plus_Smaller
 import numpy as np
 
 class D2MP(Module):
@@ -18,6 +18,8 @@ class D2MP(Module):
           net = ReUNet()
         elif network == 'ReUNet+++':
           net = ReUNet3Plus()
+        elif network == 'Smaller':
+          net = ReUNet3Plus_Smaller()
 
         self.diffusion = D2MP_OB(
             # net = self.diffnet(point_dim=2, context_dim=config.encoder_dim, tf_layer=config.tf_layer, residual=False),
