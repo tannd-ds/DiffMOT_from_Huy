@@ -9,17 +9,21 @@ class EarlyStopping:
         self.early_stop = False
         self.counter = 0
 
+        self.patience = 20
+        print("patience is forced set to 20 this run.")
+
     def __call__(self, val_loss, model, epoch, optimizer, scheduler, model_dir, dataset):
         score = -val_loss
 
         if self.best_score is None:
             self.best_score = score
             self.save_checkpoint(model, epoch, optimizer, scheduler, model_dir, dataset)
-        # elif score < self.best_score + self.delta:
-        #     self.counter += 1
-        #     print(f"Validation loss did not improve. Counter: {self.counter}/{self.patience}")
-        #     if self.counter >= self.patience:
-        #         self.early_stop = True
+        elif score < self.best_score + self.delta:
+            self.counter += 1
+            print(f"Validation loss did not improve. Counter: {self.counter}/{self.patience}")
+            if self.counter >= self.patience:
+                self.save_checkpoint(model, epoch, optimizer, scheduler, model_dir, dataset)
+                self.early_stop = True
         else:
             self.best_score = score
             self.save_checkpoint(model, epoch, optimizer, scheduler, model_dir, dataset)
