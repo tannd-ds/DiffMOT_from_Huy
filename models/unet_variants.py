@@ -5,7 +5,7 @@ import math
 from .components import MLP, TransAoA, ReUnet3PlusDownBlock, ReUnet3PlusDownBlock_Smaller
 
 class ReUNet(nn.Module):
-  def __init__(self, noise_dim = 4, num_layers = 1, hidden_size = 256, filters = [16, 64, 128, 256, 512, 1024], mid = True):
+  def __init__(self, noise_dim = 4, num_layers = 1, hidden_size = 256, filters = [16, 64, 128, 256, 512], mid = True):
     super(ReUNet, self).__init__()
     self.noise_dim = noise_dim
     self.num_layers = num_layers
@@ -17,6 +17,7 @@ class ReUNet(nn.Module):
     self.up_blocks, self.down_blocks = nn.ModuleList(), nn.ModuleList()
     self.prediction = MLP(in_features = self.filters[0],
                           out_features = noise_dim)
+    self.skip_connections = nn.ModuleList()
 
     ## -------------UP--------------
     input_size = noise_dim
@@ -25,6 +26,9 @@ class ReUNet(nn.Module):
                         output_size = filter,
                         num_layers = num_layers,)
       self.up_blocks.append(block)
+      self.skip_connections.append(nn.Conv1d(in_channels=input_size,
+                                             out_channels=filter,
+                                             kernel_size=1))
       input_size = filter
 
     ## -------------DOWN--------------
@@ -35,9 +39,12 @@ class ReUNet(nn.Module):
       self.down_blocks.append(block)
 
     ## -------------MID--------------
-
-    # if self.mid
-    # '''stage 4d'''
+    if self.mid:
+        self.mid_layer = nn.Sequential(
+            nn.LayerNorm(self.reversed_filters[-1]),
+            nn.MultiheadAttention(embed_dim = self.reversed_filters[-1], num_heads = 8, batch_first=True),
+            nn.Linear(self.filters[-1], self.filters[-1]),
+        )
 
   def forward(self, x, beta, context):
     batch_size = x.size(0)
@@ -46,23 +53,26 @@ class ReUNet(nn.Module):
     time_emb = torch.cat([beta, torch.sin(beta), torch.cos(beta)], dim=-1)  # (B, 3)
     ctx_emb = self.shared_ctx_mlp(torch.cat([time_emb, context], dim=-1)) # (B, 256)
 
-    output = x # 16, 4
-    ## -------------UP--------------
+    # UP path
+    skip_features = []
+    output = x  # Initial input
     for i, block in enumerate(self.up_blocks):
-      output = block(input = output,
-                      ctx = ctx_emb) # 16, 4^i
-    ## -------------MID--------------
+        output = block(input=output, ctx=ctx_emb)
+        skip_features.append(self.skip_connections[i](output))
 
-    # if self.mid
+    # MID layer
+    if self.mid:
+        output, _ = self.mid_layer(output, output, output)
 
-    ## -------------DOWN--------------
+    # DOWN path
     for i, block in enumerate(self.down_blocks):
-      output = block(input = output,
-                      ctx = ctx_emb)
+        output = torch.cat([output, skip_features[-(i + 1)]], dim=1)  # Skip connection
+        output = block(input=output, ctx=ctx_emb)
 
     output = self.prediction(output)
     return output
-  
+
+
 class ReUNet3Plus_Smaller(nn.Module):
   def __init__(self, noise_dim = 4, num_layers = 1, hidden_size = 256, filters = [16, 64, 128, 256], mid = True):
     super(ReUNet3Plus_Smaller, self).__init__()
