@@ -1,6 +1,5 @@
 import os
 import torch
-import cv2
 
 import numpy as np
 import os.path as osp
@@ -9,20 +8,20 @@ from torch import nn, optim, utils
 from tensorboardX import SummaryWriter
 from tqdm.auto import tqdm
 
-from dataset import DiffMOTDataset
+from dataset.dataset import DiffMOTDataset
 from models.autoencoder import D2MP
 from models.condition_embedding import History_motion_embedding
 
 import time
-from tracker.DiffMOTtracker import diffmottracker
+# from tracker.DiffMOTtracker import diffmottracker
 
 from tracking_utils.log import logger
 from tracking_utils.timer import Timer
-from tracking_utils.visualization import plot_tracking
 
 # This line is for training
 from utils import calculate_iou, calculate_ade, original_shape
 from early_stopping import EarlyStopping
+
 
 def write_results(filename, results, data_type='mot'):
     if data_type == 'mot':
@@ -45,9 +44,11 @@ def write_results(filename, results, data_type='mot'):
                 f.write(line)
     logger.info('save results to {}'.format(filename))
 
+
 def mkdirs(d):
     if not osp.exists(d):
         os.makedirs(d)
+
 
 def custom_collate_fn(batch):
     for sample in batch:
@@ -55,18 +56,17 @@ def custom_collate_fn(batch):
             del sample['image_path']
     return torch.utils.data.default_collate(batch)
 
+
 class DiffMOT():
     def __init__(self, config):
         self.config = config
         torch.backends.cudnn.benchmark = True
         self._build()
 
-        self.current_frame_id = 0
-        self.tracker = diffmottracker(self.config)
-
-    def generate(self, conds, sample = 1, bestof = True, flexibility = 0.0, ret_traj = False):
+    def generate(self, conds, sample=1, bestof=True, flexibility=0.0, ret_traj=False):
         cond_encodeds = self.model.encoder(conds)
-        track_pred = self.model.diffusion.sample(cond_encodeds, sample, bestof, flexibility=flexibility, ret_traj=ret_traj)
+        track_pred = self.model.diffusion.sample(cond_encodeds, sample, bestof, flexibility=flexibility,
+                                                 ret_traj=ret_traj)
         return track_pred.squeeze(dim=0)
 
     def step(self, data_loader, train=True):
@@ -121,106 +121,97 @@ class DiffMOT():
     def train(self):
         for epoch in range(1, self.config.epochs + 1):
             print("Training")
-            train_metrics = self.step(data_loader = self.train_dataloader, train=True)
+            train_metrics = self.step(data_loader=self.train_dataloader, train=True)
             print("Validation")
-            val_metrics = self.step(data_loader = self.val_dataloader, train=False)
+            val_metrics = self.step(data_loader=self.val_dataloader, train=False)
 
             self.scheduler.step()
 
             print(f"Epoch {epoch}/{self.config.epochs}")
-            print(f"Train - Loss: {train_metrics['mean_loss']:.6f}, IoU: {train_metrics['mean_iou']:.6f}, ADE: {train_metrics['mean_ade']:.6f}")
-            print(f"Val   - Loss: {val_metrics['mean_loss']:.6f}, IoU: {val_metrics['mean_iou']:.6f}, ADE: {val_metrics['mean_ade']:.6f}")
+            print(
+                f"Train - Loss: {train_metrics['mean_loss']:.6f}, IoU: {train_metrics['mean_iou']:.6f}, ADE: {train_metrics['mean_ade']:.6f}")
+            print(
+                f"Val   - Loss: {val_metrics['mean_loss']:.6f}, IoU: {val_metrics['mean_iou']:.6f}, ADE: {val_metrics['mean_ade']:.6f}")
 
-            self.early_stopping(val_metrics['mean_loss'], self.model, epoch, self.optimizer, self.scheduler, self.model_dir, self.config.dataset)
+            self.early_stopping(val_metrics['mean_loss'], self.model, epoch, self.optimizer, self.scheduler,
+                                self.model_dir, self.config.dataset)
             if self.early_stopping.early_stop:
                 print("Early stopping")
                 break
 
-    def eval(self):
-        det_root = self.config.det_dir
-        img_root = det_root.replace('/detections/', '/')
+    # def eval(self):
+    #     det_root = self.config.det_dir
+    #     img_root = det_root.replace('/detections/', '/')
 
-        seqs = [s for s in os.listdir(det_root)]
-        seqs.sort()
+    #     seqs = [s for s in os.listdir(det_root)]
+    #     seqs.sort()
 
-        for seq in seqs:
-            print(seq)
-            det_path = osp.join(det_root, seq)
-            img_path = osp.join(img_root, seq, 'img1')
+    #     for seq in seqs:
+    #         print(seq)
+    #         det_path = osp.join(det_root, seq)
+    #         img_path = osp.join(img_root, seq, 'img1')
 
-            info_path = osp.join(self.config.info_dir, seq, 'seqinfo.ini')
-            seq_info = open(info_path).read()
-            seq_width = int(seq_info[seq_info.find('imWidth=') + 8:seq_info.find('\nimHeight')])
-            seq_height = int(seq_info[seq_info.find('imHeight=') + 9:seq_info.find('\nimExt')])
+    #         info_path = osp.join(self.config.info_dir, seq, 'seqinfo.ini')
+    #         seq_info = open(info_path).read()
+    #         seq_width = int(seq_info[seq_info.find('imWidth=') + 8:seq_info.find('\nimHeight')])
+    #         seq_height = int(seq_info[seq_info.find('imHeight=') + 9:seq_info.find('\nimExt')])
 
-            tracker = diffmottracker(self.config)
-            timer = Timer()
-            results = []
-            frame_id = 0
+    #         tracker = diffmottracker(self.config)
+    #         timer = Timer()
+    #         results = []
+    #         frame_id = 0
 
-            frames = [s for s in os.listdir(det_path)]
-            frames.sort()
-            imgs = [s for s in os.listdir(img_path)]
-            imgs.sort()
+    #         frames = [s for s in os.listdir(det_path)]
+    #         frames.sort()
+    #         imgs = [s for s in os.listdir(img_path)]
+    #         imgs.sort()
 
-            video_path = osp.join(self.config.info_dir, seq, 'output.mp4')
-            logger.info(f"video save_path is {video_path}")
-            vid_writer = cv2.VideoWriter(
-                video_path, cv2.VideoWriter_fourcc(*"mp4v"), 30, (int(seq_width), int(seq_height))
-            )
+    #         for i, f in enumerate(frames):
+    #             if frame_id % 10 == 0:
+    #                 logger.info('Processing frame {} ({:.2f} fps)'.format(frame_id, 1. / max(1e-5, timer.average_time)))
 
-            for i, f in enumerate(frames):
-                if frame_id % 10 == 0:
-                    logger.info('Processing frame {} ({:.2f} fps)'.format(frame_id, 1. / max(1e-5, timer.average_time)))
+    #             timer.tic()
+    #             f_path = osp.join(det_path, f)
+    #             dets = np.loadtxt(f_path, dtype=np.float32, delimiter=',').reshape(-1, 6)[:, 1:6]
 
-                timer.tic()
-                f_path = osp.join(det_path, f)
-                dets = np.loadtxt(f_path, dtype=np.float32, delimiter=',').reshape(-1, 6)[:, 1:6]
+    #             im_path = osp.join(img_path, imgs[i])
+    #             # img = cv2.imread(im_path)
+    #             tag = f"{seq}:{frame_id+1}"
+    #             # track
+    #             # online_targets = tracker.update(dets, self.model, frame_id, seq_width, seq_height, tag, img)
+    #             online_targets = tracker.update(dets, self.model, frame_id, seq_width, seq_height, tag)
+    #             online_tlwhs = []
+    #             online_ids = []
+    #             for t in online_targets:
+    #                 tlwh = t.tlwh
+    #                 tid = t.track_id
+    #                 online_tlwhs.append(tlwh)
+    #                 online_ids.append(tid)
+    #             timer.toc()
+    #             # save results
+    #             results.append((frame_id + 1, online_tlwhs, online_ids))
+    #             frame_id += 1
 
-                im_path = osp.join(img_path, imgs[i])
-                img = cv2.imread(im_path)
-                tag = f"{seq}:{frame_id+1}"
-                # track
-                online_targets = tracker.update(dets, self.model, frame_id, seq_width, seq_height, tag, img)
-                # online_targets = tracker.update(dets, self.model, frame_id, seq_width, seq_height, tag)
-                online_tlwhs = []
-                online_ids = []
-                for t in online_targets:
-                    tlwh = t.tlwh
-                    tid = t.track_id
-                    online_tlwhs.append(tlwh)
-                    online_ids.append(tid)
-                timer.toc()
-                # save results
-                results.append((frame_id + 1, online_tlwhs, online_ids))
-                online_im = plot_tracking(
-                    img, online_tlwhs, online_ids, frame_id=frame_id + 1, fps=1. / timer.average_time
-                )
-                vid_writer.write(online_im)
-
-                frame_id += 1
-
-            tracker.dump_cache()
-            result_root = self.config.save_dir
-            mkdirs(result_root)
-            result_filename = osp.join(result_root, '{}.txt'.format(seq))
-            write_results(result_filename, results)
+    #         tracker.dump_cache()
+    #         result_root = self.config.save_dir
+    #         mkdirs(result_root)
+    #         result_filename = osp.join(result_root, '{}.txt'.format(seq))
+    #         write_results(result_filename, results)
 
     def _build(self):
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self._build_dir()
         self._build_encoder()
         self._build_model()
-        if not self.config["eval_mode"]:
-            self._build_train_loader()
-            self._build_optimizer()
+        self._build_train_loader()
+        self._build_optimizer()
 
         print("> Everything built. Have fun :)")
 
     def _build_dir(self):
-        self.model_dir = osp.join("./experiments",self.config.eval_expname)
+        self.model_dir = osp.join("./experiments", self.config.eval_expname)
         self.log_writer = SummaryWriter(log_dir=self.model_dir)
-        os.makedirs(self.model_dir,exist_ok=True)
+        os.makedirs(self.model_dir, exist_ok=True)
         log_name = '{}.log'.format(time.strftime('%Y-%m-%d-%H-%M'))
         log_name = f"{self.config.dataset}_{log_name}"
 
@@ -238,23 +229,21 @@ class DiffMOT():
         self.log.info(self.config.dataset)
         self.log.info("\n")
 
-
         if self.config.eval_mode:
             epoch = self.config.eval_at
             checkpoint_dir = osp.join(self.model_dir, f"{self.config.dataset}_epoch{epoch}.pt")
-            self.checkpoint = torch.load(checkpoint_dir, map_location = self.device)
+            self.checkpoint = torch.load(checkpoint_dir, map_location=self.device)
 
         print("> Directory built!")
 
     def _build_optimizer(self):
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.config.lr)
-        self.scheduler = optim.lr_scheduler.ExponentialLR(self.optimizer,gamma=0.98)
+        self.scheduler = optim.lr_scheduler.ExponentialLR(self.optimizer, gamma=0.98)
         self.early_stopping = EarlyStopping(patience=self.config.patience, delta=self.config.delta)
         print("> Optimizer built!")
 
     def _build_encoder(self):
         self.encoder = History_motion_embedding()
-
 
     def _build_model(self):
         """ Define Model """
@@ -262,14 +251,15 @@ class DiffMOT():
         model = D2MP(config, encoder=self.encoder)
 
         self.model = model
-        if not self.config.eval_mode:
-            self.model = torch.nn.DataParallel(self.model, self.config.gpus).to('cuda')
-        else:
-            self.model = self.model.cuda()
-            self.model = self.model.eval()
+        self.model.to(self.device)
+        # if not self.config.eval_mode:
+        #     self.model = torch.nn.DataParallel(self.model, self.config.gpus).to('cuda')
+        # else:
+        #     self.model = self.model.cuda()
+        #     self.model = self.model.eval()
 
-        if self.config.eval_mode:
-            self.model.load_state_dict({k.replace('module.', ''): v for k, v in self.checkpoint['ddpm'].items()})
+        # if self.config.eval_mode:
+        #     self.model.load_state_dict({k.replace('module.', ''): v for k, v in self.checkpoint['ddpm'].items()})
 
         params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
         print("> Model built!")
@@ -285,7 +275,7 @@ class DiffMOT():
         self.train_dataset = DiffMOTDataset(train_path, config)
         print("len: ", len(self.train_dataset))
 
-        print("="*80)
+        print("=" * 80)
         val_path = f'{data_path}/val'
         print("Validation Dataset: " + val_path)
         self.val_dataset = DiffMOTDataset(val_path, config)
@@ -297,7 +287,7 @@ class DiffMOT():
             shuffle=True,
             # num_workers=self.config.preprocess_workers,
             # pin_memory=True,
-            collate_fn = custom_collate_fn
+            collate_fn=custom_collate_fn
         )
 
         self.val_dataloader = utils.data.DataLoader(
@@ -306,7 +296,7 @@ class DiffMOT():
             shuffle=True,
             # num_workers=self.config.preprocess_workers,
             # pin_memory=True,
-            collate_fn = custom_collate_fn
+            collate_fn=custom_collate_fn
         )
 
         print("> Train Dataset built!")
